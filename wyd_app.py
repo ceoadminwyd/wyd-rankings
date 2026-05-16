@@ -171,7 +171,7 @@ def parse_pdf(pdf_bytes: bytes) -> dict:
                     upline = re.sub(r'\s+(A\.?N\.?D\.?|Rb?\s+An[d]?|Mfg|Eb|BC|And?)\s*$',
                                     '', upline, flags=re.IGNORECASE).strip()
                     clean_name = name_l.replace(" W Y D", " WYD").strip()
-                    entry = (int(rank_l), clean_name, upline, raw_value)
+                    entry = (int(rank_l), clean_name, upline, raw_value, title_l)
                     data[cur_sec].setdefault(cur_lvl, []).append(entry)
                     i += 5
                     continue
@@ -268,10 +268,13 @@ def compute_rankings(data: dict, include: dict) -> dict:
             if result:
                 rankings[sec_key][lvl] = result
 
-        # For sections that split Below/Above RVP, pre-compute combined groups
+        # For sections that split Below/Above RVP, split by title code
+        # (more reliable than level headers since some sections have no level breakdown)
         if sec_key in SPLIT_SECS:
-            below_raw = [e for lvl, lvl_e in levels.items() if lvl in BELOW_LEVELS for e in lvl_e]
-            above_raw = [e for lvl, lvl_e in levels.items() if lvl in ABOVE_LEVELS for e in lvl_e]
+            above_titles = {"RVP", "SVP"}
+            all_entries  = [e for lvl_e in levels.values() for e in lvl_e]
+            below_raw = [e for e in all_entries if not (len(e) >= 5 and e[4] in above_titles)]
+            above_raw = [e for e in all_entries if len(e) >= 5 and e[4] in above_titles]
             if below_raw:
                 rankings[sec_key]["Below RVP"] = top5(below_raw)
             if above_raw:
