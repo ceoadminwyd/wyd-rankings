@@ -610,7 +610,7 @@ def generate_pdf(rankings: dict, top_gun: dict, period: str) -> bytes:
                     fe = fmt_entries(overall, sec_key)
                     story.append(subcat_block("All Levels", fe, col, _tie_note(fe)))
         else:
-            lvl_order = ["Overall Top 5", "REP/SRP", "DIS", "DIV", "REG/SRL", "RVP+", "ALL"]
+            lvl_order = ["REP/SRP", "DIS", "DIV", "REG/SRL", "RVP+", "ALL"]
             for lvl in lvl_order:
                 entries = sec_r.get(lvl)
                 if not entries:
@@ -731,7 +731,7 @@ with tab_rank:
             continue
         label = SECTION_LABELS.get(sec_key, sec_key)
         st.subheader(label)
-        disp_order = ["Overall Top 5", "Below RVP", "Above RVP",
+        disp_order = ["Below RVP", "Above RVP",
                       "REP/SRP", "DIS", "DIV", "REG/SRL", "RVP+", "ALL"]
         for lvl in disp_order:
             entries = sec_r.get(lvl)
