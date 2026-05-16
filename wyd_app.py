@@ -247,7 +247,11 @@ BELOW_LEVELS = {"REP/SRP", "DIS", "DIV", "REG/SRL", "ALL"}
 ABOVE_LEVELS = {"RVP+"}
 
 
-def compute_rankings(data: dict, include: dict) -> dict:
+def compute_rankings(data: dict, include: dict,
+                     cash_months: int = 3,
+                     cash_below_avg: int = 4000,
+                     cash_rvp_avg: int = 8000) -> dict:
+    above_titles = {"RVP", "SVP"}
     rankings = {}
     for sec_key, levels in data.items():
         if not include.get(sec_key, True):
@@ -269,12 +273,18 @@ def compute_rankings(data: dict, include: dict) -> dict:
                 rankings[sec_key][lvl] = result
 
         # For sections that split Below/Above RVP, split by title code
-        # (more reliable than level headers since some sections have no level breakdown)
         if sec_key in SPLIT_SECS:
-            above_titles = {"RVP", "SVP"}
-            all_entries  = [e for lvl_e in levels.values() for e in lvl_e]
-            below_raw = [e for e in all_entries if not (len(e) >= 5 and e[4] in above_titles)]
-            above_raw = [e for e in all_entries if len(e) >= 5 and e[4] in above_titles]
+            all_e     = [e for lvl_e in levels.values() for e in lvl_e]
+            below_raw = [e for e in all_e if not (len(e) >= 5 and e[4] in above_titles)]
+            above_raw = [e for e in all_e if len(e) >= 5 and e[4] in above_titles]
+
+            # Apply minimum income filter for Personal Cash
+            if sec_key == "ps_cash":
+                min_below = cash_months * cash_below_avg
+                min_above = cash_months * cash_rvp_avg
+                below_raw = [e for e in below_raw if parse_val(e[3]) >= min_below]
+                above_raw = [e for e in above_raw if parse_val(e[3]) >= min_above]
+
             if below_raw:
                 rankings[sec_key]["Below RVP"] = top5(below_raw)
             if above_raw:
@@ -556,7 +566,10 @@ def _tie_note(entries: list) -> str:
     return ""
 
 
-def generate_pdf(rankings: dict, top_gun: dict, period: str) -> bytes:
+def generate_pdf(rankings: dict, top_gun: dict, period: str,
+                 cash_months: int = 3,
+                 cash_below_avg: int = 4000,
+                 cash_rvp_avg: int = 8000) -> bytes:
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=letter,
                             leftMargin=0.48*inch, rightMargin=0.48*inch,
@@ -597,14 +610,18 @@ def generate_pdf(rankings: dict, top_gun: dict, period: str) -> bytes:
                 fe = fmt_entries(below_e, sec_key)
                 note = _tie_note(fe)
                 if sec_key == "ps_cash":
-                    note = "* Minimum qualifying income: $12,000 (4K avg/month).  " + note
+                    min_b = cash_months * cash_below_avg
+                    note = (f"* Minimum qualifying income: ${min_b:,} "
+                            f"(${cash_below_avg:,}/month avg × {cash_months} months).  ") + note
                 story.append(subcat_block(
                     "Below RVP (REP / DIS / DIV / REG / SRL)", fe, col, note.strip()))
             if above_e:
                 fe = fmt_entries(above_e, sec_key)
                 note = _tie_note(fe)
                 if sec_key == "ps_cash":
-                    note = "* Minimum qualifying income: $22,000 (8K avg/month).  " + note
+                    min_a = cash_months * cash_rvp_avg
+                    note = (f"* Minimum qualifying income: ${min_a:,} "
+                            f"(${cash_rvp_avg:,}/month avg × {cash_months} months).  ") + note
                 story.append(subcat_block(
                     "RVP & Above (SVP / RVP)", fe, col, note.strip()))
             if not below_e and not above_e:
@@ -696,6 +713,12 @@ with st.sidebar:
         "bs_nbp":  st.checkbox("Base New Builders Premium",   True),
     }
     st.markdown("---")
+    st.markdown("**Personal Cash Thresholds:**")
+    cash_months    = st.number_input("Contest duration (months)", min_value=1, max_value=12, value=3, step=1)
+    cash_below_avg = st.number_input("Below RVP monthly avg ($)", min_value=0, value=4000, step=500)
+    cash_rvp_avg   = st.number_input("RVP+ monthly avg ($)",      min_value=0, value=8000, step=500)
+    st.caption(f"Below RVP min: **${cash_months * cash_below_avg:,}** · RVP+ min: **${cash_months * cash_rvp_avg:,}**")
+    st.markdown("---")
     st.info("**Tiebreaker:** Recruiting ties are broken by Personal Submitted Premium.")
 
 # ── Upload ────────────────────────────────────────────────────────────────────
@@ -709,7 +732,7 @@ with st.spinner("Reading PDF..."):
     raw_bytes = uploaded.read()
     parsed    = parse_pdf(raw_bytes)
     filtered  = {k: v for k, v in parsed.items() if include.get(k, True)}
-    rankings  = compute_rankings(filtered, include)
+    rankings  = compute_rankings(filtered, include, cash_months, cash_below_avg, cash_rvp_avg)
     top_gun   = compute_top_gun(filtered)
 
 total = sum(len(e) for lv in parsed.values() for e in lv.values())
@@ -757,7 +780,7 @@ with tab_rank:
     st.subheader("Download Medals PDF")
     if st.button("Generate & Download PDF"):
         with st.spinner("Building PDF..."):
-            pdf_bytes = generate_pdf(rankings, top_gun, period)
+            pdf_bytes = generate_pdf(rankings, top_gun, period, cash_months, cash_below_avg, cash_rvp_avg)
         fname = f"WYD_Rankings_{period.replace(' ','_').replace('–','-')}.pdf"
         st.download_button("Download PDF", pdf_bytes, fname, "application/pdf")
 
