@@ -295,14 +295,15 @@ def compute_rankings(data: dict, include: dict,
 
 def compute_top_gun(data: dict) -> dict:
     """Best personal performer per category, split Below RVP / RVP & Above."""
-    below_levels = {"REP/SRP", "DIS", "DIV", "REG/SRL", "ALL"}
-    above_levels = {"RVP+"}
+    above_titles = {"RVP", "SVP"}
 
-    def best(sec_key, level_set):
+    def best_by_title(sec_key, use_above: bool):
         entries = []
-        for lvl, lvl_entries in data.get(sec_key, {}).items():
-            if lvl in level_set or (level_set == below_levels and lvl not in above_levels):
-                entries.extend(lvl_entries)
+        for lvl_entries in data.get(sec_key, {}).values():
+            for e in lvl_entries:
+                is_above = len(e) >= 5 and e[4] in above_titles
+                if is_above == use_above:
+                    entries.append(e)
         t5 = top5(entries)
         return t5[0] if t5 else None
 
@@ -313,8 +314,8 @@ def compute_top_gun(data: dict) -> dict:
     }
     result = {"Below RVP": {}, "RVP & Above": {}}
     for cat, sec_key in cats.items():
-        b = best(sec_key, below_levels)
-        a = best(sec_key, above_levels)
+        b = best_by_title(sec_key, use_above=False)
+        a = best_by_title(sec_key, use_above=True)
         if b:
             result["Below RVP"][cat]   = (b[1], b[3])
         if a:
